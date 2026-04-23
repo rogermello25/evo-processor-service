@@ -13,6 +13,7 @@ This pattern is standard for MCP servers that require OAuth authentication.
 
 import json
 import logging
+import os
 import base64
 import hashlib
 import secrets
@@ -1705,15 +1706,21 @@ class MCPOAuthService:
                     json={"provider": self.provider_name, "config": config}
                 )
             else:
-                # Callback scenario: create a client without auth header
-                # WARNING: This will fail if core-service requires authentication
-                logger.warning(
-                    f"Attempting to store {self.provider_name} credentials without authentication. "
-                    f"This may fail if core-service requires auth. URL: {url}"
-                )
+                # Callback scenario: use EVOAI_CRM_API_TOKEN as service-to-service token
+                service_token = os.getenv("EVOAI_CRM_API_TOKEN")
+                if not service_token:
+                    logger.error(
+                        f"Cannot store {self.provider_name} credentials: user_token is empty "
+                        f"and EVOAI_CRM_API_TOKEN is not configured. URL: {url}"
+                    )
+                    raise RuntimeError(
+                        "EVOAI_CRM_API_TOKEN must be set for unauthenticated OAuth callbacks"
+                    )
+                logger.debug(f"Using service token for {self.provider_name} credential storage")
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.post(
                         url,
+                        headers={"X-Service-Token": service_token},
                         json={"provider": self.provider_name, "config": config}
                     )
             
